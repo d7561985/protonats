@@ -56,7 +56,7 @@ func (t *TeleObservability) RecordSendingEvent(_ctx context.Context, e event.Eve
 	span.PutFields(
 		zap.String("cloud.e.type", e.Type()),
 		zap.String("key", e.ID()),
-		zap.String("e info", e.String()),
+		zap.String("info", e.String()),
 	)
 
 	return ctx, cb

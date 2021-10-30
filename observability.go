@@ -72,7 +72,9 @@ func (t TeleObservability) RecordReceivedMalformedEvent(_ context.Context, _ err
 
 // RecordCallingInvoker consumer middleware
 // expect special data inside containing opentracing.SpanReference which receiver should put inside
-//
+//˚
+// consumer represent invoker model for opentracing,
+//from tracing objectives this mean that it begin new span either and that span should be return and used by others
 func (t *TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.Event) (context.Context, func(errOrResult error)) {
 	opt := make([]opentracing.StartSpanOption, 0, 4)
 	opt = append(opt, opentracing.Tags{
@@ -91,7 +93,7 @@ func (t *TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.
 	ext.Component.Set(s, "cloud.events.protocol.nats.observability")
 	ext.SpanKindConsumer.Set(s)
 
-	ctx := opentracing.ContextWithSpan(t.Ctx(), s)
+	ctx := opentracing.ContextWithSpan(t.Copy().Ctx(), s)
 	tel.UpdateTraceFields(ctx)
 
 	return ctx, func(errOrResult error) {}

@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/cloudevents/sdk-go/protocol/nats/v2 v2.6.1
 	github.com/cloudevents/sdk-go/v2 v2.6.1
-	github.com/d7561985/tel v1.0.5
+	github.com/d7561985/tel v1.0.6
 	github.com/google/uuid v1.3.0
 	github.com/nats-io/nats.go v1.13.0
 	github.com/opentracing/opentracing-go v1.2.0

@@ -28,36 +28,19 @@ type TeleObservability struct {
 // creates new tracing brunch from provided inside context OpenTracing or tel data
 func (t *TeleObservability) RecordSendingEvent(_ctx context.Context, e event.Event) (context.Context, func(errOrResult error)) {
 	span, ctx := tel.StartSpanFromContext(_ctx, fmt.Sprintf("SEND EVENT: %s", e.Type()))
-	start := time.Now()
 
 	ext.Component.Set(span, "cloud.events.protocol.nats.observability")
 	ext.SpanKindProducer.Set(span)
-
-	cb := func(err error) {
-		defer span.Finish()
-
-		t.Metrics.AddReaderTopicHandlingTime(e.Type(), time.Since(start))
-		span.PutFields(zap.Duration("duration", time.Since(start)))
-
-		if err != nil {
-			t.Metrics.AddReaderTopicFatalError(e.Type(), 1)
-			t.Metrics.AddReaderTopicProcessError(e.Type())
-			t.Metrics.AddReaderTopicErrorEvents(e.Type(), 1)
-
-			span.PutFields(zap.Error(err))
-			return
-		}
-
-		t.Metrics.AddReaderTopicDecodeEvents(e.Type(), 1)
-	}
-
-	t.Metrics.AddReaderTopicReadEvents(e.Type(), 1)
 
 	span.PutFields(
 		zap.String("cloud.event.type", e.Type()),
 		zap.String("key", e.ID()),
 		zap.String("info", e.String()),
 	)
+
+	cb := func(err error) {
+		defer span.Finish()
+	}
 
 	return ctx, cb
 }
@@ -89,14 +72,40 @@ func (t *TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.
 		}
 	}
 
-	s := t.T().StartSpan(fmt.Sprintf("GET EVENT: %s", e.Type()), opt...)
-	ext.Component.Set(s, "cloud.events.protocol.nats.observability")
-	ext.SpanKindConsumer.Set(s)
+	tr, start := t.Copy(), time.Now()
+	span, ctx := tr.StartSpan(fmt.Sprintf("GET EVENT: %s", e.Type()), opt...)
 
-	ctx := opentracing.ContextWithSpan(t.Copy().Ctx(), s)
+	ext.Component.Set(span, "cloud.events.protocol.nats.observability")
+	ext.SpanKindConsumer.Set(span)
 	tel.UpdateTraceFields(ctx)
 
-	return ctx, func(errOrResult error) {}
+	span.PutFields(
+		zap.String("cloud.event.type", e.Type()),
+		zap.String("key", e.ID()),
+		zap.String("info", e.String()),
+	)
+
+	cb := func(err error) {
+		defer span.Finish()
+
+		t.Metrics.AddReaderTopicHandlingTime(e.Type(), time.Since(start))
+		span.PutFields(zap.Duration("duration", time.Since(start)))
+
+		if err != nil {
+			t.Metrics.AddReaderTopicFatalError(e.Type(), 1)
+			t.Metrics.AddReaderTopicProcessError(e.Type())
+			t.Metrics.AddReaderTopicErrorEvents(e.Type(), 1)
+
+			span.PutFields(zap.Error(err))
+			return
+		}
+
+		t.Metrics.AddReaderTopicDecodeEvents(e.Type(), 1)
+	}
+
+	t.Metrics.AddReaderTopicReadEvents(e.Type(), 1)
+
+	return ctx, cb
 }
 
 func (t TeleObservability) RecordRequestEvent(ctx context.Context, _ event.Event) (context.Context, func(error, *event.Event)) {

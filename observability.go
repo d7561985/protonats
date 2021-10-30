@@ -2,6 +2,7 @@ package protonats
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cloudevents/sdk-go/v2/binding"
@@ -13,38 +14,49 @@ import (
 	"go.uber.org/zap"
 )
 
+// TeleObservability implement cloudevents client.ObservabilityService with OpenTracing propagation
+// This flow idempotent and not tight coupled to NATS
+// and can easily treat any opentracing flow which provides correct context values
+//
+// Producer component handled in RecordSendingEvent and has specific context requirements
 type TeleObservability struct {
 	*tel.Telemetry
 	Metrics metrics.MetricsReader
 }
 
-func (t *TeleObservability) RecordSendingEvent(_ctx context.Context, event event.Event) (context.Context, func(errOrResult error)) {
-	span, ctx := tel.StartSpanFromContext(_ctx, event.String())
+// RecordSendingEvent producer interceptor required context argument to be polluted with tel context
+// creates new tracing brunch from provided inside context OpenTracing or tel data
+func (t *TeleObservability) RecordSendingEvent(_ctx context.Context, e event.Event) (context.Context, func(errOrResult error)) {
+	span, ctx := tel.StartSpanFromContext(_ctx, fmt.Sprintf("SEND EVENT: %s", e.Type()))
 	start := time.Now()
+
+	ext.Component.Set(span, "cloud.events.protocol.nats.observability")
+	ext.SpanKindProducer.Set(span)
 
 	cb := func(err error) {
 		defer span.Finish()
 
-		t.Metrics.AddReaderTopicHandlingTime(event.Type(), time.Since(start))
+		t.Metrics.AddReaderTopicHandlingTime(e.Type(), time.Since(start))
 		span.PutFields(zap.Duration("duration", time.Since(start)))
 
 		if err != nil {
-			t.Metrics.AddReaderTopicFatalError(event.Type(), 1)
-			t.Metrics.AddReaderTopicProcessError(event.Type())
-			t.Metrics.AddReaderTopicErrorEvents(event.Type(), 1)
+			t.Metrics.AddReaderTopicFatalError(e.Type(), 1)
+			t.Metrics.AddReaderTopicProcessError(e.Type())
+			t.Metrics.AddReaderTopicErrorEvents(e.Type(), 1)
 
 			span.PutFields(zap.Error(err))
 			return
 		}
 
-		t.Metrics.AddReaderTopicDecodeEvents(event.Type(), 1)
+		t.Metrics.AddReaderTopicDecodeEvents(e.Type(), 1)
 	}
 
-	t.Metrics.AddReaderTopicReadEvents(event.Type(), 1)
+	t.Metrics.AddReaderTopicReadEvents(e.Type(), 1)
 
-	tel.FromCtx(ctx).PutFields(
-		zap.String("type", event.Type()),
-		zap.String("info", event.String()),
+	span.PutFields(
+		zap.String("cloud.e.type", e.Type()),
+		zap.String("key", e.ID()),
+		zap.String("e info", e.String()),
 	)
 
 	return ctx, cb
@@ -54,15 +66,19 @@ func (t *TeleObservability) InboundContextDecorators() []func(context.Context, b
 	return []func(context.Context, binding.Message) context.Context{}
 }
 
-func (t TeleObservability) RecordReceivedMalformedEvent(ctx context.Context, err error) {
+func (t TeleObservability) RecordReceivedMalformedEvent(_ context.Context, _ error) {
 	panic("implement me")
 }
 
-func (t TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.Event) (context.Context, func(errOrResult error)) {
+// RecordCallingInvoker consumer middleware
+// expect special data inside containing opentracing.SpanReference which receiver should put inside
+//
+func (t *TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.Event) (context.Context, func(errOrResult error)) {
 	opt := make([]opentracing.StartSpanOption, 0, 4)
 	opt = append(opt, opentracing.Tags{
 		"cloud.event.type": e.Type(),
 		"key":              e.ID(),
+		"event info":       e.String(),
 	})
 
 	if ref := _ctx.Value(opentracing.SpanReference{}); ref != nil {
@@ -71,7 +87,7 @@ func (t TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.E
 		}
 	}
 
-	s := t.T().StartSpan(e.Type(), opt...)
+	s := t.T().StartSpan(fmt.Sprintf("GET EVENT: %s", e.Type()), opt...)
 	ext.Component.Set(s, "cloud.events.protocol.nats.observability")
 	ext.SpanKindConsumer.Set(s)
 
@@ -81,6 +97,6 @@ func (t TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.E
 	return ctx, func(errOrResult error) {}
 }
 
-func (t TeleObservability) RecordRequestEvent(ctx context.Context, e event.Event) (context.Context, func(error, *event.Event)) {
+func (t TeleObservability) RecordRequestEvent(ctx context.Context, _ event.Event) (context.Context, func(error, *event.Event)) {
 	return ctx, func(errOrResult error, e *event.Event) {}
 }

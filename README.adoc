@@ -10,7 +10,7 @@ Feature:
 * Producer uses `context.TopicFrom` feature for overwrite default subject
 * Consumer subject pool for group
 * Protocol Consumer and Sender struct members are Interfaces and easily could be replaced
-* Trace carrier cloudevents protocol this allows `TeleObservability` to be ubiquitous for any protocol
+* Trace carried within cloudevents payload that's why this allows `TeleObservability` to be ubiquitous for any protocol
 
 == Trace feature enable
 

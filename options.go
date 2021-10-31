@@ -34,3 +34,23 @@ func WithQueuePoolSubscriber(queue string, subject ...string) ConsumerOption {
 		return nil
 	}
 }
+
+type ObservabilityOption func(*TeleObservability)
+
+// WithSpanAttributesGetter appends the returned attributes from the function to the span.
+func WithSpanAttributesGetter(attrGetter SpanAttrGetter) ObservabilityOption {
+	return func(os *TeleObservability) {
+		if attrGetter != nil {
+			os.spanAttributesGetter = attrGetter
+		}
+	}
+}
+
+// WithSpanNameFormatter replaces the default span name with the string returned from the function
+func WithSpanNameFormatter(nameFormatter SpanNameFormatter) ObservabilityOption {
+	return func(os *TeleObservability) {
+		if nameFormatter != nil {
+			os.spanNameFormatter = nameFormatter
+		}
+	}
+}

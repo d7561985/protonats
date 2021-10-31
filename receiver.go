@@ -10,14 +10,10 @@ import (
 	"io"
 	"sync"
 
-	"github.com/d7561985/protonats/adapter"
-	"github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
-
 	cn "github.com/cloudevents/sdk-go/protocol/nats/v2"
-
 	"github.com/cloudevents/sdk-go/v2/binding"
 	"github.com/cloudevents/sdk-go/v2/protocol"
+	"github.com/nats-io/nats.go"
 )
 
 type NatsReceiver interface {
@@ -25,19 +21,6 @@ type NatsReceiver interface {
 }
 
 var _ protocol.Receiver = (*Receiver)(nil)
-
-type msgErr struct {
-	*cn.Message
-	ctx context.Context
-}
-
-var _ binding.MessageContext = (*msgErr)(nil)
-
-// Context override ctx inside Invoker call and pass it
-// inside  `observabilityService.RecordCallingInvoker` where you can continue span and close it on callback call
-func (m *msgErr) Context() context.Context {
-	return m.ctx
-}
 
 type Receiver struct {
 	incoming <-chan *nats.Msg
@@ -56,16 +39,7 @@ func (r *Receiver) Receive(ctx context.Context) (binding.Message, error) {
 			return nil, io.EOF
 		}
 
-		msg := msgErr{Message: cn.NewMessage(in)}
-
-		spanCtx, err := opentracing.GlobalTracer().Extract(opentracing.TextMap, adapter.NewHeader(&msg.Message.Msg.Header))
-		if err == nil {
-			msg.ctx = context.WithValue(ctx, opentracing.SpanReference{}, opentracing.ChildOf(spanCtx))
-		} else {
-			msg.ctx = ctx
-		}
-
-		return &msg, nil
+		return cn.NewMessage(in), nil
 	case <-ctx.Done():
 		return nil, io.EOF
 	}
@@ -143,7 +117,7 @@ func (c *Consumer) OpenInbound(ctx context.Context) error {
 	return sub.Drain()
 }
 
-func (c *Consumer) Close(ctx context.Context) error {
+func (c *Consumer) Close(_ context.Context) error {
 	// Before closing, let's be sure OpenInbound completes
 	// We send a signal to close and then we lock on subMtx in order
 	// to wait OpenInbound to finish draining the queue

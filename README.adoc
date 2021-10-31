@@ -2,13 +2,15 @@
 
 Updated nats protocol for https://github.com/cloudevents/sdk-go/tree/main/protocol/nats/v2
 
+This package extent `opentracing` package for trace carrier
+
 Feature:
 
 * OpenTracing features with "github.com/d7561985/tel" send trace `to` NATS, read tracing span `from` NATS
 * Producer uses `context.TopicFrom` feature for overwrite default subject
 * Consumer subject pool for group
-* Protocol Consumer and Sander struct members are Interfaces and easily could be replaced
-
+* Protocol Consumer and Sender struct members are Interfaces and easily could be replaced
+* Trace carrier cloudevents protocol this allow `TeleObservability` use as idempotent ;)
 
 == Trace feature enable
 
@@ -37,11 +39,9 @@ func main()  {
 
 	metricsss := metrics.NewCollectorMetricsReader()
      ce, err := cloudevents.NewClient(p,
-            client.WithObservabilityService(&protonats.TeleObservability{
-                Metrics:   metricsss,
-                Telemetry: &t,
-            }),
-        )
+         client.WithObservabilityService(protonats.NewTeleObservability(&t, metricsss)),
+     )
+
 }
 ----
 

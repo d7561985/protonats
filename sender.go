@@ -9,11 +9,7 @@ import (
 	"github.com/cloudevents/sdk-go/v2/binding"
 	cecontext "github.com/cloudevents/sdk-go/v2/context"
 	"github.com/cloudevents/sdk-go/v2/protocol"
-	"github.com/d7561985/protonats/adapter"
-	"github.com/d7561985/tel"
 	"github.com/nats-io/nats.go"
-	"github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 type Sender struct {
@@ -63,16 +59,8 @@ func (s *Sender) Send(ctx context.Context, in binding.Message, transformers ...b
 		subject = topic
 	}
 
-	h := make(nats.Header)
-
-	span, _ := tel.StartSpanFromContext(ctx, "-> NATS://"+subject)
-	if err = span.T().T().Inject(span.Context(), opentracing.TextMap, adapter.NewHeader(&h)); err != nil {
-		return errors.WithStack(err)
-	}
-
 	return s.Conn.PublishMsg(&nats.Msg{
 		Subject: subject,
-		Header:  h,
 		Data:    writer.Bytes(),
 	})
 }

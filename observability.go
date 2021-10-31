@@ -11,7 +11,6 @@ import (
 	"github.com/cloudevents/sdk-go/v2/client"
 	"github.com/cloudevents/sdk-go/v2/event"
 	"github.com/cloudevents/sdk-go/v2/observability"
-	"github.com/d7561985/protonats/adapter"
 	"github.com/d7561985/tel"
 	"github.com/d7561985/tel/monitoring/metrics"
 	"github.com/opentracing/opentracing-go"
@@ -62,6 +61,9 @@ func (t *TeleObservability) RecordSendingEvent(_ctx context.Context, e event.Eve
 	ext.Component.Set(span, componentName)
 	ext.SpanKindProducer.Set(span)
 
+	// inject tracing
+	InjectDistributedTracingExtension(ctx, &e)
+
 	cb := func(err error) {
 		defer span.Finish()
 	}
@@ -83,6 +85,13 @@ func (t *TeleObservability) InboundContextDecorators() []func(context.Context, b
 func (t *TeleObservability) RecordCallingInvoker(_ctx context.Context, e *event.Event) (context.Context, func(errOrResult error)) {
 	opt := make([]opentracing.StartSpanOption, 0, 2)
 	opt = append(opt, t.GetSpanAttributes(*e, getFuncName()))
+
+	spanCtx, err := ExtractDistributedTracingExtension(t.Ctx(), e)
+	if err != nil {
+		tel.FromCtx(_ctx).Error("extract distributed trace", zap.Error(err))
+	} else {
+		opt = append(opt, opentracing.ChildOf(spanCtx))
+	}
 
 	if ref := _ctx.Value(opentracing.SpanReference{}); ref != nil {
 		if v, ok := ref.(opentracing.SpanReference); ok {
@@ -156,17 +165,7 @@ func (t TeleObservability) getSpanName(e *cloudevents.Event, suffix string) stri
 
 // Extracts the traceparent from the msg and enriches the context to enable propagation
 func (t *TeleObservability) tracePropagatorContextDecorator(ctx context.Context, msg binding.Message) context.Context {
-	v, ok := msg.(*msgErr)
-	if !ok {
-		return ctx
-	}
-
-	spanCtx, err := t.T().Extract(opentracing.TextMap, adapter.NewHeader(&v.Message.Msg.Header))
-	if err != nil {
-		return ctx
-	}
-
-	return context.WithValue(t.Ctx(), opentracing.SpanReference{}, opentracing.ChildOf(spanCtx))
+	return t.Copy().Ctx()
 }
 
 func getFuncName() string {

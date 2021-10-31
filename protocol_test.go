@@ -71,6 +71,7 @@ func TestA(t *testing.T) {
 			}
 			fmt.Printf("Got Data: %+v\n", data)
 
+			fmt.Println(event.Extensions())
 			fmt.Printf("----------------------------\n")
 			done <- struct{}{}
 			return nil
@@ -90,6 +91,7 @@ func TestA(t *testing.T) {
 		Sequence: 1,
 		Message:  "Hello World",
 	})
+	e.SetExtension("EXTENSION", "V2123")
 
 	// inject topic
 	ctx = cecontext.WithTopic(ctx, TopicB)

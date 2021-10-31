@@ -22,17 +22,6 @@ type NatsReceiver interface {
 
 var _ protocol.Receiver = (*Receiver)(nil)
 
-type msgErr struct {
-	*cn.Message
-}
-
-// Finish is possible place for start span directly on message receive?
-func (m *msgErr) Finish(error) error { return nil }
-
-func NewMessage(in *nats.Msg) *msgErr {
-	return &msgErr{Message: cn.NewMessage(in)}
-}
-
 type Receiver struct {
 	incoming <-chan *nats.Msg
 }
@@ -50,7 +39,7 @@ func (r *Receiver) Receive(ctx context.Context) (binding.Message, error) {
 			return nil, io.EOF
 		}
 
-		return NewMessage(in), nil
+		return cn.NewMessage(in), nil
 	case <-ctx.Done():
 		return nil, io.EOF
 	}

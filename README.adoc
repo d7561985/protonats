@@ -37,11 +37,9 @@ func main()  {
 
 	metricsss := metrics.NewCollectorMetricsReader()
      ce, err := cloudevents.NewClient(p,
-            client.WithObservabilityService(&protonats.TeleObservability{
-                Metrics:   metricsss,
-                Telemetry: &t,
-            }),
-        )
+         client.WithObservabilityService(protonats.NewTeleObservability(&t, metricsss)),
+     )
+
 }
 ----
 

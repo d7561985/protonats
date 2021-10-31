@@ -1,4 +1,7 @@
-package protonats
+//go:build internal_tests
+// +build internal_tests
+
+package protonats_test
 
 import (
 	"context"
@@ -9,6 +12,7 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/client"
 	cecontext "github.com/cloudevents/sdk-go/v2/context"
+	"github.com/d7561985/protonats"
 	"github.com/d7561985/tel"
 	"github.com/d7561985/tel/monitoring/metrics"
 	"github.com/google/uuid"
@@ -30,10 +34,10 @@ const (
 )
 
 func TestA(t *testing.T) {
-	p, err := NewProtocol("127.0.0.1:4222", "xxxx", TopicA,
+	p, err := protonats.NewProtocol("127.0.0.1:4222", "", TopicA,
 		[]nats.Option{},
-		WithConsumerOptions(
-			WithQueuePoolSubscriber("api-service",
+		protonats.WithConsumerOptions(
+			protonats.WithQueuePoolSubscriber("api-service",
 				TopicB, TopicA,
 			),
 		),
@@ -51,11 +55,9 @@ func TestA(t *testing.T) {
 	ctx := tl.Ctx()
 
 	ce, err := cloudevents.NewClient(p,
-		client.WithObservabilityService(&TeleObservability{
-			Metrics:   metrics.NewCollectorMetricsReader(),
-			Telemetry: &tl,
-		}))
-
+		client.WithObservabilityService(
+			protonats.NewTeleObservability(&tl, metrics.NewCollectorMetricsReader())),
+	)
 	require.NoError(t, err)
 
 	done := make(chan struct{})
@@ -89,6 +91,7 @@ func TestA(t *testing.T) {
 		Message:  "Hello World",
 	})
 
+	// inject topic
 	ctx = cecontext.WithTopic(ctx, TopicB)
 
 	err = ce.Send(ctx, e)
